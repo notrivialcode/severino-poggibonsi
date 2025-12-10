@@ -1,13 +1,13 @@
 import { GitHubService } from '../services/github';
 import { MockLogger } from '../utils/logger';
-import { loadConfig } from '../utils/config';
+import { loadConfig, loadRemoteConfig } from '../utils/config';
 import { handleMergedBranchCleanup } from '../handlers/mergedBranches';
 
 async function main(): Promise<void> {
   const logger = new MockLogger();
-  const config = loadConfig();
+  const localConfig = loadConfig();
 
-  logger.info(`${config.bot.name} - Branch Cleanup Starting`);
+  logger.info(`${localConfig.bot.name} - Branch Cleanup Starting`);
 
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
@@ -34,16 +34,35 @@ async function main(): Promise<void> {
   }
 
   if (!branchName || !finalOwner || !finalRepo) {
-    logger.error('Required environment variables missing. Need BRANCH_NAME (or HEAD_REF) and TARGET_OWNER/TARGET_REPO (or GITHUB_REPOSITORY)');
+    logger.error(
+      'Required environment variables missing. Need BRANCH_NAME (or HEAD_REF) and TARGET_OWNER/TARGET_REPO (or GITHUB_REPOSITORY)'
+    );
     process.exit(1);
   }
 
   const github = new GitHubService(token, logger);
+  const context = { owner: finalOwner, repo: finalRepo };
+
+  // Load config from target repository
+  const config = await loadRemoteConfig(
+    (path) => github.getFileContent(context, path),
+    localConfig
+  );
+
+  logger.info('Loaded config', {
+    protectedBranches: config.branches.protectedPatterns,
+  });
+
+  // Check dry run mode
+  const dryRun = process.env.DRY_RUN === 'true' || process.env.DRY_RUN === '1';
+  if (dryRun) {
+    logger.info('DRY RUN MODE - No actions will be performed');
+  }
 
   // Use provided SHA or fetch current SHA
   let branchSha: string | undefined = process.env.BRANCH_SHA;
   if (!branchSha) {
-    branchSha = await github.getBranchSha({ owner: finalOwner, repo: finalRepo }, branchName) || undefined;
+    branchSha = (await github.getBranchSha(context, branchName)) || undefined;
   }
 
   if (!branchSha) {
@@ -55,9 +74,10 @@ async function main(): Promise<void> {
     github,
     logger,
     config,
-    { owner: finalOwner, repo: finalRepo },
+    context,
     branchName,
-    branchSha
+    branchSha,
+    dryRun
   );
 
   if (result.success) {

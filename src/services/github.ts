@@ -138,7 +138,11 @@ export class GitHubService {
     return data.default_branch;
   }
 
-  async isBranchMerged(context: GitHubContext, branchName: string, baseBranch: string): Promise<boolean> {
+  async isBranchMerged(
+    context: GitHubContext,
+    branchName: string,
+    baseBranch: string
+  ): Promise<boolean> {
     this.logger.debug('Checking if branch is merged', { ...context, branchName, baseBranch });
 
     try {
@@ -157,7 +161,11 @@ export class GitHubService {
     }
   }
 
-  async getBranchCommits(context: GitHubContext, branchName: string, limit: number = 10): Promise<Array<{ sha: string; author: string; date: Date }>> {
+  async getBranchCommits(
+    context: GitHubContext,
+    branchName: string,
+    limit: number = 10
+  ): Promise<Array<{ sha: string; author: string; date: Date }>> {
     this.logger.debug('Fetching branch commits', { ...context, branchName, limit });
 
     try {
@@ -215,7 +223,10 @@ export class GitHubService {
     }
   }
 
-  async findPullRequestForBranch(context: GitHubContext, branchName: string): Promise<number | null> {
+  async findPullRequestForBranch(
+    context: GitHubContext,
+    branchName: string
+  ): Promise<number | null> {
     this.logger.debug('Finding PR for branch', { ...context, branchName });
 
     const { data } = await this.octokit.pulls.list({
@@ -233,7 +244,10 @@ export class GitHubService {
     return null;
   }
 
-  async listComments(context: GitHubContext, issueNumber: number): Promise<Array<{ id: number; body: string; user: string }>> {
+  async listComments(
+    context: GitHubContext,
+    issueNumber: number
+  ): Promise<Array<{ id: number; body: string; user: string }>> {
     const { data } = await this.octokit.issues.listComments({
       owner: context.owner,
       repo: context.repo,
@@ -261,5 +275,25 @@ export class GitHubService {
       owner: repo.owner.login,
       name: repo.name,
     }));
+  }
+
+  async getFileContent(context: GitHubContext, path: string): Promise<string | null> {
+    this.logger.debug('Fetching file content', { ...context, path });
+
+    try {
+      const { data } = await this.octokit.repos.getContent({
+        owner: context.owner,
+        repo: context.repo,
+        path,
+      });
+
+      if ('content' in data && data.content) {
+        return Buffer.from(data.content, 'base64').toString('utf-8');
+      }
+      return null;
+    } catch (error) {
+      this.logger.debug('File not found', { ...context, path });
+      return null;
+    }
   }
 }

@@ -48,6 +48,34 @@ export function loadConfig(configPath?: string): BotConfig {
   return DEFAULT_CONFIG;
 }
 
+export async function loadRemoteConfig(
+  getFileContent: (path: string) => Promise<string | null>,
+  localConfig?: BotConfig
+): Promise<BotConfig> {
+  const baseConfig = localConfig || DEFAULT_CONFIG;
+
+  // Try severino.config.json first
+  let content = await getFileContent('severino.config.json');
+
+  if (!content) {
+    // Fallback to .severino.json
+    content = await getFileContent('.severino.json');
+  }
+
+  if (content) {
+    try {
+      const remoteConfig = JSON.parse(content);
+      console.log('Loaded remote config from target repository');
+      return mergeConfig(baseConfig, remoteConfig);
+    } catch (error) {
+      console.warn('Failed to parse remote config, using local config');
+    }
+  }
+
+  console.log('No remote config found, using local config');
+  return baseConfig;
+}
+
 export function loadUserMapping(mappingPath?: string): UserMapping {
   const pathToUse = mappingPath || path.join(process.cwd(), 'config', 'user-mapping.json');
 
@@ -63,15 +91,29 @@ export function loadUserMapping(mappingPath?: string): UserMapping {
   return {};
 }
 
-function mergeConfig(defaults: BotConfig, overrides: Partial<BotConfig>): BotConfig {
+function mergeConfig(
+  defaults: BotConfig,
+  overrides: Partial<BotConfig> & { branches?: { protectedBranches?: string[] } }
+): BotConfig {
+  // Support both protectedBranches (from external configs) and protectedPatterns (internal)
+  const protectedPatterns =
+    overrides.branches?.protectedPatterns ||
+    overrides.branches?.protectedBranches ||
+    defaults.branches.protectedPatterns;
+
   return {
     bot: { ...defaults.bot, ...overrides.bot },
     stalePrs: { ...defaults.stalePrs, ...overrides.stalePrs },
-    branches: { ...defaults.branches, ...overrides.branches },
+    branches: {
+      ...defaults.branches,
+      ...overrides.branches,
+      protectedPatterns,
+    },
     slack: {
       ...defaults.slack,
       ...overrides.slack,
-      webhookUrl: overrides.slack?.webhookUrl || process.env.SLACK_WEBHOOK_URL || defaults.slack.webhookUrl,
+      webhookUrl:
+        overrides.slack?.webhookUrl || process.env.SLACK_WEBHOOK_URL || defaults.slack.webhookUrl,
       botToken: overrides.slack?.botToken || process.env.SLACK_BOT_TOKEN || defaults.slack.botToken,
     },
   };

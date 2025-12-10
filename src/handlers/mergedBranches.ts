@@ -7,12 +7,14 @@ export class MergedBranchesHandler {
   private analyzer: BranchAnalyzer;
   private logger: ILogger;
   private config: BotConfig;
+  private dryRun: boolean;
 
-  constructor(github: GitHubService, logger: ILogger, config: BotConfig) {
+  constructor(github: GitHubService, logger: ILogger, config: BotConfig, dryRun: boolean = false) {
     this.github = github;
     this.logger = logger;
     this.config = config;
     this.analyzer = new BranchAnalyzer(github, logger, config);
+    this.dryRun = dryRun;
   }
 
   async cleanupMergedPrBranch(
@@ -39,6 +41,25 @@ export class MergedBranchesHandler {
         action: 'branch_cleanup',
         details: { branchName, reason: safetyCheck.reason },
         error: safetyCheck.reason,
+      };
+    }
+
+    // Dry run mode - log but don't execute
+    if (this.dryRun) {
+      this.logger.info('[DRY RUN] Would delete merged branch', {
+        ...context,
+        branchName,
+        sha: expectedSha,
+      });
+      return {
+        success: true,
+        action: 'branch_cleanup_dry_run',
+        details: {
+          branchName,
+          sha: expectedSha,
+          repo: `${context.owner}/${context.repo}`,
+          dryRun: true,
+        },
       };
     }
 
@@ -77,7 +98,10 @@ export class MergedBranchesHandler {
     try {
       const prMergedBranches = await this.analyzer.findPrMergedBranches(context);
 
-      this.logger.info(`Found ${prMergedBranches.length} PR-merged branches still present`, context);
+      this.logger.info(
+        `Found ${prMergedBranches.length} PR-merged branches still present`,
+        context
+      );
 
       for (const analysis of prMergedBranches) {
         const result = await this.cleanupMergedPrBranch(
@@ -101,9 +125,10 @@ export async function handleMergedBranchCleanup(
   config: BotConfig,
   context: GitHubContext,
   branchName: string,
-  expectedSha: string
+  expectedSha: string,
+  dryRun: boolean = false
 ): Promise<ActionResult> {
-  const handler = new MergedBranchesHandler(github, logger, config);
+  const handler = new MergedBranchesHandler(github, logger, config, dryRun);
   return handler.cleanupMergedPrBranch(context, branchName, expectedSha);
 }
 
