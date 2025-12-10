@@ -76,32 +76,39 @@ async function getInstallationToken(owner: string, repo: string): Promise<string
   const privateKey = process.env.PRIVATE_KEY?.replace(/\\n/g, '\n');
 
   if (!appId || !privateKey) {
-    throw new Error('GitHub App credentials not configured');
+    throw new Error(
+      `GitHub App credentials not configured: APP_ID=${appId ? 'set' : 'missing'}, PRIVATE_KEY=${privateKey ? 'set' : 'missing'}`
+    );
   }
 
-  // Create app auth
-  const auth = createAppAuth({
-    appId,
-    privateKey,
-  });
+  try {
+    // Create app auth (appId must be a number)
+    const auth = createAppAuth({
+      appId: Number(appId),
+      privateKey,
+    });
 
-  // Get app authentication to find installation
-  const appAuth = await auth({ type: 'app' });
-  const appOctokit = new Octokit({ auth: appAuth.token });
+    // Get app authentication to find installation
+    const appAuth = await auth({ type: 'app' });
+    const appOctokit = new Octokit({ auth: appAuth.token });
 
-  // Get installation for this repository
-  const { data: installation } = await appOctokit.apps.getRepoInstallation({
-    owner,
-    repo,
-  });
+    // Get installation for this repository
+    const { data: installation } = await appOctokit.apps.getRepoInstallation({
+      owner,
+      repo,
+    });
 
-  // Get installation token
-  const installationAuth = await auth({
-    type: 'installation',
-    installationId: installation.id,
-  });
+    // Get installation token
+    const installationAuth = await auth({
+      type: 'installation',
+      installationId: installation.id,
+    });
 
-  return installationAuth.token;
+    return installationAuth.token;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to get installation token for ${owner}/${repo}: ${message}`);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -157,11 +164,13 @@ export async function POST(request: NextRequest) {
     try {
       githubToken = await getInstallationToken(owner, repo);
     } catch (error) {
-      logger.error('Failed to get GitHub installation token', { error, owner, repo });
-      await sendSlackResponse(
-        payload.response_url,
-        '❌ GitHub App not installed on this repository. Please contact the administrator.'
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to get GitHub installation token', {
+        error: errorMessage,
+        owner,
+        repo,
+      });
+      await sendSlackResponse(payload.response_url, `❌ GitHub App error: ${errorMessage}`);
       return NextResponse.json({ ok: true });
     }
 
