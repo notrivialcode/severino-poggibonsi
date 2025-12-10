@@ -20,6 +20,7 @@ const DEFAULT_CONFIG: BotConfig = {
     webhookUrl: process.env.SLACK_WEBHOOK_URL || '',
     botToken: process.env.SLACK_BOT_TOKEN || '',
   },
+  userMapping: {},
 };
 
 export function loadConfig(configPath?: string): BotConfig {
@@ -116,6 +117,7 @@ function mergeConfig(
         overrides.slack?.webhookUrl || process.env.SLACK_WEBHOOK_URL || defaults.slack.webhookUrl,
       botToken: overrides.slack?.botToken || process.env.SLACK_BOT_TOKEN || defaults.slack.botToken,
     },
+    userMapping: { ...defaults.userMapping, ...overrides.userMapping },
   };
 }
 

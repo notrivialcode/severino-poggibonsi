@@ -1,14 +1,13 @@
 import { GitHubService } from '../services/github';
 import { SlackService } from '../services/slack';
 import { MockLogger } from '../utils/logger';
-import { loadConfig, loadUserMapping, loadRemoteConfig } from '../utils/config';
+import { loadConfig, loadRemoteConfig } from '../utils/config';
 import { handleManualMerges } from '../handlers/manualMerges';
 import { GitHubContext } from '../types';
 
 async function main(): Promise<void> {
   const logger = new MockLogger();
   const localConfig = loadConfig();
-  const userMapping = loadUserMapping();
 
   logger.info(`${localConfig.bot.name} - Manual Merge Check Starting`);
 
@@ -29,7 +28,6 @@ async function main(): Promise<void> {
   const targetRepo = process.env.TARGET_REPO;
 
   const github = new GitHubService(token, logger);
-  const slack = new SlackService(slackToken || '', logger, userMapping);
 
   let contexts: GitHubContext[];
 
@@ -48,11 +46,14 @@ async function main(): Promise<void> {
     }));
   }
 
-  // Load remote config from first target repo
+  // Load remote config from first target repo (includes userMapping)
   const config = await loadRemoteConfig(
     (path) => github.getFileContent(contexts[0], path),
     localConfig
   );
+
+  // Create Slack service with userMapping from remote config
+  const slack = new SlackService(slackToken || '', logger, config.userMapping);
 
   const results = await handleManualMerges(github, slack, logger, config, contexts);
 

@@ -3,8 +3,13 @@ import { ILogger, BotConfig, GitHubContext, PullRequest, ActionResult } from '..
 import { hasExcludedLabel } from '../utils/config';
 
 const BOT_NAME = 'Severino Poggibonsi';
+const BOT_AVATAR_URL = 'https://severino-poggibonsi.vercel.app/severino-avatar.png';
 const WARNING_COMMENT_MARKER = '<!-- severino-stale-warning -->';
 const CLOSING_COMMENT_MARKER = '<!-- severino-stale-close -->';
+
+function createBotSignature(): string {
+  return `<img src="${BOT_AVATAR_URL}" width="32" height="32" align="left" style="margin-right: 10px;" />\n\n**${BOT_NAME}** | NOTRIVIAL Bot`;
+}
 
 export class StalePrsHandler {
   private github: GitHubService;
@@ -62,7 +67,11 @@ export class StalePrsHandler {
     const hasClosingComment = comments.some((c) => c.body.includes(CLOSING_COMMENT_MARKER));
 
     // If PR is past close threshold and has warning, close it
-    if (daysSinceActivity >= this.config.stalePrs.closeDays && hasWarningComment && !hasClosingComment) {
+    if (
+      daysSinceActivity >= this.config.stalePrs.closeDays &&
+      hasWarningComment &&
+      !hasClosingComment
+    ) {
       return this.closeStalePr(context, pr);
     }
 
@@ -74,7 +83,11 @@ export class StalePrsHandler {
     return null;
   }
 
-  private async warnStalePr(context: GitHubContext, pr: PullRequest, daysSinceActivity: number): Promise<ActionResult> {
+  private async warnStalePr(
+    context: GitHubContext,
+    pr: PullRequest,
+    daysSinceActivity: number
+  ): Promise<ActionResult> {
     this.logger.info('Posting stale warning', { prNumber: pr.number, daysSinceActivity });
 
     const daysUntilClose = this.config.stalePrs.closeDays - daysSinceActivity;
@@ -134,10 +147,16 @@ export class StalePrsHandler {
   }
 
   private createWarningComment(author: string, daysUntilClose: number): string {
+    // Ensure daysUntilClose is never negative
+    const safeDaysUntilClose = Math.max(1, daysUntilClose);
     return `${WARNING_COMMENT_MARKER}
-Ciao @${author}! I'm ${BOT_NAME}, your friendly neighborhood bot.
+${createBotSignature()}
 
-This PR has been inactive for ${this.config.stalePrs.warningDays} days. If there's no activity within the next ${daysUntilClose} days, I'll close it automatically to keep our repository tidy.
+---
+
+Ciao @${author}! I'm your friendly neighborhood bot.
+
+This PR has been inactive for ${this.config.stalePrs.warningDays} days. If there's no activity within the next ${safeDaysUntilClose} days, I'll close it automatically to keep our repository tidy.
 
 If you're still working on this, just leave a comment or push a commit to reset the timer!
 
@@ -146,7 +165,11 @@ Grazie mille!`;
 
   private createClosingComment(author: string): string {
     return `${CLOSING_COMMENT_MARKER}
-Ciao @${author}! ${BOT_NAME} here again.
+${createBotSignature()}
+
+---
+
+Ciao @${author}! I'm back.
 
 This PR has been inactive for ${this.config.stalePrs.closeDays} days, so I'm closing it now to keep things tidy.
 

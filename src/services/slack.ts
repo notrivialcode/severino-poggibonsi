@@ -13,7 +13,12 @@ export class SlackService {
   }
 
   getSlackUserId(githubUsername: string): string | null {
-    return this.userMapping[githubUsername] || null;
+    // Case-insensitive lookup - GitHub usernames may have different casing
+    const lowerUsername = githubUsername.toLowerCase();
+    const mapping = Object.entries(this.userMapping).find(
+      ([key]) => key.toLowerCase() === lowerUsername
+    );
+    return mapping ? mapping[1] : null;
   }
 
   async sendDirectMessage(slackUserId: string, message: SlackMessage): Promise<string | null> {
@@ -63,7 +68,11 @@ export class SlackService {
     return this.sendDirectMessage(slackUserId, message);
   }
 
-  private createBranchDeletionMessage(branchName: string, repoFullName: string, requestId: string): SlackMessage {
+  private createBranchDeletionMessage(
+    branchName: string,
+    repoFullName: string,
+    requestId: string
+  ): SlackMessage {
     const blocks: SlackBlock[] = [
       {
         type: 'section',
@@ -130,7 +139,12 @@ export class SlackService {
     }
   }
 
-  async updateMessage(channelId: string, messageTs: string, text: string, blocks?: SlackBlock[]): Promise<boolean> {
+  async updateMessage(
+    channelId: string,
+    messageTs: string,
+    text: string,
+    blocks?: SlackBlock[]
+  ): Promise<boolean> {
     try {
       await this.client.chat.update({
         channel: channelId,

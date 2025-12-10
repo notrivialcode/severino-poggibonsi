@@ -16,6 +16,7 @@ export interface BotConfig {
     webhookUrl: string;
     botToken: string;
   };
+  userMapping: UserMapping;
 }
 
 export interface UserMapping {

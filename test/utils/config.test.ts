@@ -1,4 +1,9 @@
-import { loadConfig, isProtectedBranch, isExcludedBranch, hasExcludedLabel } from '../../src/utils/config';
+import {
+  loadConfig,
+  isProtectedBranch,
+  isExcludedBranch,
+  hasExcludedLabel,
+} from '../../src/utils/config';
 import { BotConfig } from '../../src/types';
 
 describe('Config', () => {
@@ -20,6 +25,7 @@ describe('Config', () => {
       webhookUrl: '',
       botToken: '',
     },
+    userMapping: {},
   };
 
   describe('loadConfig', () => {
