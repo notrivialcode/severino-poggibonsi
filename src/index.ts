@@ -4,7 +4,7 @@ import { MockLogger } from './utils/logger';
 import { loadConfig } from './utils/config';
 import { handleMergedBranchCleanup } from './handlers/mergedBranches';
 
-export = (app: Probot) => {
+const probotApp = (app: Probot) => {
   const logger = new MockLogger();
   const config = loadConfig();
 
@@ -59,3 +59,5 @@ export = (app: Probot) => {
 
   app.log.info(`${config.bot.name} is ready!`);
 };
+
+export default probotApp;
