@@ -16,26 +16,38 @@ async function main(): Promise<void> {
   }
 
   // Get branch info from environment (set by GitHub Actions)
-  const headRef = process.env.HEAD_REF;
+  // Support both formats: BRANCH_NAME/TARGET_OWNER/TARGET_REPO or HEAD_REF/GITHUB_REPOSITORY
+  const branchName = process.env.BRANCH_NAME || process.env.HEAD_REF;
+  const owner = process.env.TARGET_OWNER;
+  const repo = process.env.TARGET_REPO;
   const repoFullName = process.env.GITHUB_REPOSITORY;
 
-  if (!headRef || !repoFullName) {
-    logger.error('HEAD_REF and GITHUB_REPOSITORY environment variables are required');
-    process.exit(1);
+  let finalOwner = owner;
+  let finalRepo = repo;
+
+  if (!finalOwner || !finalRepo) {
+    if (repoFullName) {
+      const [repoOwner, repoName] = repoFullName.split('/');
+      finalOwner = repoOwner;
+      finalRepo = repoName;
+    }
   }
 
-  const [owner, repo] = repoFullName.split('/');
-  if (!owner || !repo) {
-    logger.error('Invalid GITHUB_REPOSITORY format');
+  if (!branchName || !finalOwner || !finalRepo) {
+    logger.error('Required environment variables missing. Need BRANCH_NAME (or HEAD_REF) and TARGET_OWNER/TARGET_REPO (or GITHUB_REPOSITORY)');
     process.exit(1);
   }
 
   const github = new GitHubService(token, logger);
 
-  // Get the current SHA of the branch
-  const branchSha = await github.getBranchSha({ owner, repo }, headRef);
+  // Use provided SHA or fetch current SHA
+  let branchSha: string | undefined = process.env.BRANCH_SHA;
   if (!branchSha) {
-    logger.info('Branch already deleted or not found', { branch: headRef });
+    branchSha = await github.getBranchSha({ owner: finalOwner, repo: finalRepo }, branchName) || undefined;
+  }
+
+  if (!branchSha) {
+    logger.info('Branch already deleted or not found', { branch: branchName });
     process.exit(0);
   }
 
@@ -43,8 +55,8 @@ async function main(): Promise<void> {
     github,
     logger,
     config,
-    { owner, repo },
-    headRef,
+    { owner: finalOwner, repo: finalRepo },
+    branchName,
     branchSha
   );
 
