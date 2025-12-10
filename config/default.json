@@ -1,0 +1,19 @@
+{
+  "bot": {
+    "name": "Severino Poggibonsi",
+    "organization": "NOTRIVIAL"
+  },
+  "stalePrs": {
+    "warningDays": 7,
+    "closeDays": 14,
+    "excludeLabels": ["pinned", "security", "do-not-close"]
+  },
+  "branches": {
+    "protectedPatterns": ["main", "master", "develop", "release/*"],
+    "excludePatterns": ["dependabot/*"]
+  },
+  "slack": {
+    "webhookUrl": "${SLACK_WEBHOOK_URL}",
+    "botToken": "${SLACK_BOT_TOKEN}"
+  }
+}
