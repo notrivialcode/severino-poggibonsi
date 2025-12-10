@@ -1,0 +1,37 @@
+#!/bin/sh
+
+. "$(dirname "$0")/_env.sh"
+
+
+# 🎉 Welcome message
+echo -e "${CYAN}${BOLD}NOTRIVIAL®${NC}${CYAN} is kicking off its pre-commit fiesta!${NC}"
+
+# 1) lint-staged
+echo -e "${BLUE}✨ Running lint-staged magic…${NC}"
+if npx lint-staged; then
+  echo -e "${GREEN}✅ lint-staged says: all clear!${NC}"
+else
+  echo -e "${YELLOW}⚠️  lint-staged found some mess—tidy up before committing!${NC}"
+  exit 1
+fi
+
+# 2) TypeScript check
+echo -e "${BLUE}🔍 Checking TypeScript types…${NC}"
+if npx tsc --noEmit; then
+  echo -e "${GREEN}✅ TypeScript gives us a thumbs up!${NC}"
+else
+  echo -e "${YELLOW}⚠️  TypeScript errors ahead—please fix them first!${NC}"
+  exit 1
+fi
+
+# 3) Run tests
+echo -e "${BLUE}🧪 Running tests…${NC}"
+if npm test -- --passWithNoTests; then
+  echo -e "${GREEN}✅ All tests passed!${NC}"
+else
+  echo -e "${YELLOW}⚠️  Some tests failed—please fix them before committing!${NC}"
+  exit 1
+fi
+
+# 🎊 Final success banner
+echo -e "${CYAN}🚀 All checks passed! You're officially cleared by ${BOLD}NOTRIVIAL®${NC}${CYAN}! Commit away!${NC}"

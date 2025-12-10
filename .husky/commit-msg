@@ -1,0 +1,130 @@
+#!/bin/sh
+
+. "$(dirname "$0")/_env.sh"
+
+# Get the commit message file path
+commit_msg_file=$1
+
+# Check if commit message file is provided
+if [ -z "$commit_msg_file" ]; then
+    echo "Error: No commit message file provided"
+    echo "Usage: $0 <commit-msg-file>"
+    exit 1
+fi
+
+# Check if file exists
+if [ ! -f "$commit_msg_file" ]; then
+    echo "Error: Commit message file not found: $commit_msg_file"
+    exit 1
+fi
+
+commit_msg=$(cat "$commit_msg_file")
+
+# Skip checks for merge commits (their messages are auto-generated)
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  echo "${YELLOW}ℹ️  Detected merge commit — skipping Conventional Commits/Jira validation.${NC}"
+  exit 0
+fi
+
+# Also skip if the message itself starts with "Merge "
+first_line="$(head -n1 "$commit_msg_file")"
+
+case "$first_line" in
+  Merge\ * )
+    echo "${YELLOW}ℹ️  Detected merge commit — skipping validation.${NC}"
+    exit 0
+    ;;
+  Revert\ * )
+    echo "${YELLOW}ℹ️  Detected revert commit — skipping validation.${NC}"
+    exit 0
+    ;;
+esac
+
+
+# Welcome message
+echo "${CYAN}${BOLD}NOTRIVIAL®${NC}${CYAN} is validating your commit message...${NC}"
+
+# Conventional Commits pattern
+# Format: type(scope?): subject
+# Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert
+conventional_pattern='^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\([a-zA-Z0-9-]+\))?: .+'
+
+# Check if commit message follows Conventional Commits format
+if ! echo "$commit_msg" | head -n 1 | grep -qE "$conventional_pattern"; then
+    echo "${RED}❌ Commit message does not follow Conventional Commits format!${NC}"
+    echo "${YELLOW}Expected format: type(scope?): subject${NC}"
+    echo "${YELLOW}Valid types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert${NC}"
+    echo ""
+    echo "${YELLOW}Examples for Severino:${NC}"
+    echo "  feat: add stale PR detection"
+    echo "  fix(webhook): resolve payload parsing issue"
+    echo "  docs: update README with deployment info"
+    echo "  refactor(cli): improve branch cleanup logic"
+    exit 1
+fi
+
+# Extract type and subject for validation
+first_line=$(echo "$commit_msg" | head -n 1)
+type=$(echo "$first_line" | sed -E 's/^([a-z]+)(\([^)]+\))?: .*/\1/')
+subject=$(echo "$first_line" | sed -E 's/^[a-z]+(\([^)]+\))?: (.*)/\2/')
+
+# Check subject length (should not exceed 72 characters)
+subject_length=${#subject}
+if [ $subject_length -gt 72 ]; then
+    echo "${YELLOW}⚠️  Subject line is too long (${subject_length} chars). Keep it under 72 characters.${NC}"
+    exit 1
+fi
+
+# Check for imperative mood (basic check - first word should not end in 's' or 'ed')
+first_word=$(echo "$subject" | awk '{print $1}')
+if echo "$first_word" | grep -qE '(s|ed|ing)$'; then
+    echo "${YELLOW}⚠️  Use imperative mood in subject (e.g., 'add' not 'adds' or 'added')${NC}"
+fi
+
+# Check for Jira task ID in footer
+# Accepts formats like: Jira: ABC-123, JIRA: DEF-456, jira: GHI-789
+jira_pattern='(Jira|JIRA|jira): [A-Z]+-[0-9]+'
+
+if ! echo "$commit_msg" | grep -qE "$jira_pattern"; then
+    echo "${RED}❌ Commit message must include a Jira task ID in the footer!${NC}"
+    echo "${YELLOW}Expected format: Jira: PROJECT-123${NC}"
+    echo ""
+    echo "${YELLOW}Example commit message:${NC}"
+    echo "  feat: add stale PR detection"
+    echo ""
+    echo "  Implement automatic detection of inactive PRs"
+    echo ""
+    echo "  Jira: SEV-123"
+    exit 1
+fi
+
+# Validate that Jira ID is in the footer (after a blank line)
+has_proper_footer=false
+in_footer=false
+while IFS= read -r line; do
+    if [ -z "$line" ]; then
+        in_footer=true
+    elif [ "$in_footer" = true ] && echo "$line" | grep -qE "$jira_pattern"; then
+        has_proper_footer=true
+        break
+    fi
+done << EOF
+$commit_msg
+EOF
+
+if [ "$has_proper_footer" = false ]; then
+    echo "${RED}❌ Jira task ID must be in the footer (after a blank line)!${NC}"
+    echo "${YELLOW}The Jira reference should be separated from the body by a blank line.${NC}"
+    echo ""
+    echo "${YELLOW}Correct format:${NC}"
+    echo "  type(scope?): subject"
+    echo ""
+    echo "  [optional body]"
+    echo ""
+    echo "  Jira: PROJECT-123"
+    exit 1
+fi
+
+# Success message
+echo "${GREEN}✅ Commit message validation passed!${NC}"
+echo "${CYAN}🚀 Your commit is ${BOLD}NOTRIVIAL®${NC}${CYAN} approved!${NC}"
