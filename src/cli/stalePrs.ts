@@ -1,14 +1,14 @@
 import { GitHubService } from '../services/github';
 import { MockLogger } from '../utils/logger';
-import { loadConfig } from '../utils/config';
+import { loadConfig, loadRemoteConfig } from '../utils/config';
 import { handleStalePrs } from '../handlers/stalePrs';
 import { GitHubContext } from '../types';
 
 async function main(): Promise<void> {
   const logger = new MockLogger();
-  const config = loadConfig();
+  const localConfig = loadConfig();
 
-  logger.info(`${config.bot.name} - Stale PR Check Starting`);
+  logger.info(`${localConfig.bot.name} - Stale PR Check Starting`);
 
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
@@ -16,16 +16,34 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Get target repo from env vars (single repo mode) or fall back to org scan
+  const targetOwner = process.env.TARGET_OWNER;
+  const targetRepo = process.env.TARGET_REPO;
+
   const github = new GitHubService(token, logger);
 
-  // Get all repos in the organization
-  const repos = await github.listOrgRepos(config.bot.organization);
-  logger.info(`Found ${repos.length} repositories in ${config.bot.organization}`);
+  let contexts: GitHubContext[];
 
-  const contexts: GitHubContext[] = repos.map((repo) => ({
-    owner: repo.owner,
-    repo: repo.name,
-  }));
+  if (targetOwner && targetRepo) {
+    // Single repo mode - use TARGET_OWNER and TARGET_REPO
+    contexts = [{ owner: targetOwner, repo: targetRepo }];
+    logger.info(`Targeting single repository: ${targetOwner}/${targetRepo}`);
+  } else {
+    // Org mode - scan all repos in organization
+    const org = localConfig.bot.organization;
+    const repos = await github.listOrgRepos(org);
+    logger.info(`Found ${repos.length} repositories in ${org}`);
+    contexts = repos.map((repo) => ({
+      owner: repo.owner,
+      repo: repo.name,
+    }));
+  }
+
+  // Load remote config from first target repo
+  const config = await loadRemoteConfig(
+    (path) => github.getFileContent(contexts[0], path),
+    localConfig
+  );
 
   const results = await handleStalePrs(github, logger, config, contexts);
 
