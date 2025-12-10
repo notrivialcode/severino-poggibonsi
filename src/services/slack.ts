@@ -71,8 +71,14 @@ export class SlackService {
   private createBranchDeletionMessage(
     branchName: string,
     repoFullName: string,
-    requestId: string
+    _requestId: string
   ): SlackMessage {
+    // Encode branch info in button value (serverless-friendly, no state needed)
+    const [owner, repo] = repoFullName.split('/');
+    const payload = Buffer.from(JSON.stringify({ owner, repo, branch: branchName })).toString(
+      'base64'
+    );
+
     const blocks: SlackBlock[] = [
       {
         type: 'section',
@@ -92,7 +98,7 @@ export class SlackService {
             },
             style: 'primary',
             action_id: 'branch_delete_approve',
-            value: requestId,
+            value: payload,
           },
           {
             type: 'button',
@@ -102,7 +108,7 @@ export class SlackService {
             },
             style: 'danger',
             action_id: 'branch_delete_reject',
-            value: requestId,
+            value: payload,
           },
         ],
       },
