@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GitHubService } from '../services/github';
 import { SlackService } from '../services/slack';
 import { BranchAnalyzer } from '../services/branchAnalyzer';
+import { wasDmSent, markDmSent } from '../services/kvStore';
 import { ILogger, BotConfig, GitHubContext, PendingDeletion, ActionResult } from '../types';
 
 export class ManualMergesHandler {
@@ -12,12 +13,7 @@ export class ManualMergesHandler {
   private config: BotConfig;
   private pendingDeletions: Map<string, PendingDeletion> = new Map();
 
-  constructor(
-    github: GitHubService,
-    slack: SlackService,
-    logger: ILogger,
-    config: BotConfig
-  ) {
+  constructor(github: GitHubService, slack: SlackService, logger: ILogger, config: BotConfig) {
     this.github = github;
     this.slack = slack;
     this.logger = logger;
@@ -78,7 +74,16 @@ export class ManualMergesHandler {
 
     // Send Slack messages to all contributors
     let messagesSent = 0;
+    let skippedDuplicates = 0;
     for (const contributor of contributors) {
+      // Check if we already sent a DM for this branch/contributor
+      const alreadySent = await wasDmSent(context.owner, context.repo, branchName, contributor);
+      if (alreadySent) {
+        this.logger.debug('Skipping duplicate DM', { contributor, branchName });
+        skippedDuplicates++;
+        continue;
+      }
+
       const messageTs = await this.slack.sendBranchDeletionRequest(
         contributor,
         branchName,
@@ -87,6 +92,8 @@ export class ManualMergesHandler {
       );
 
       if (messageTs) {
+        // Mark DM as sent in KV store
+        await markDmSent(context.owner, context.repo, branchName, contributor);
         messagesSent++;
         this.logger.info('Sent deletion request to contributor', {
           contributor,
@@ -235,9 +242,7 @@ export class ManualMergesHandler {
   }
 
   getPendingDeletions(): PendingDeletion[] {
-    return Array.from(this.pendingDeletions.values()).filter(
-      (p) => p.status === 'pending'
-    );
+    return Array.from(this.pendingDeletions.values()).filter((p) => p.status === 'pending');
   }
 
   getPendingDeletion(requestId: string): PendingDeletion | undefined {

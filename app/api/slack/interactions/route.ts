@@ -6,6 +6,7 @@ import { GitHubService } from '../../../../src/services/github';
 import { BranchAnalyzer } from '../../../../src/services/branchAnalyzer';
 import { MockLogger } from '../../../../src/utils/logger';
 import { loadConfig } from '../../../../src/utils/config';
+import { clearBranchDmRecords } from '../../../../src/services/kvStore';
 
 interface SlackInteractionPayload {
   type: string;
@@ -190,6 +191,8 @@ export async function POST(request: NextRequest) {
       // Delete the branch
       try {
         await github.deleteBranch(context, branch);
+        // Clear KV records so we don't skip if a new branch with same name appears
+        await clearBranchDmRecords(owner, repo, branch);
         logger.info('Branch deleted successfully', { owner, repo, branch });
         await sendSlackResponse(
           payload.response_url,
