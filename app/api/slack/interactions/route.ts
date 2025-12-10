@@ -164,9 +164,13 @@ export async function POST(request: NextRequest) {
     try {
       githubToken = await getInstallationToken(owner, repo);
     } catch (error) {
+      // Log full error details for debugging
+      console.error('GitHub App auth error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       logger.error('Failed to get GitHub installation token', {
         error: errorMessage,
+        stack: errorStack,
         owner,
         repo,
       });
