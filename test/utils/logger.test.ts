@@ -1,4 +1,4 @@
-import { MockLogger } from '../../src/utils/logger';
+import { MockLogger } from '@/src/utils/logger';
 
 describe('MockLogger', () => {
   let logger: MockLogger;

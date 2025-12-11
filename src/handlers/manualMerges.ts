@@ -2,16 +2,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { GitHubService } from '../services/github';
 import { SlackService } from '../services/slack';
 import { BranchAnalyzer } from '../services/branchAnalyzer';
-import { wasDmSent, markDmSent } from '../services/kvStore';
+import { wasDmSent, markDmSent } from '../services/redis';
 import { ILogger, BotConfig, GitHubContext, PendingDeletion, ActionResult } from '../types';
 
 export class ManualMergesHandler {
-  private github: GitHubService;
-  private slack: SlackService;
-  private analyzer: BranchAnalyzer;
-  private logger: ILogger;
-  private config: BotConfig;
-  private pendingDeletions: Map<string, PendingDeletion> = new Map();
+  private readonly github: GitHubService;
+  private readonly slack: SlackService;
+  private readonly analyzer: BranchAnalyzer;
+  private readonly logger: ILogger;
+  private readonly config: BotConfig;
+  private readonly pendingDeletions: Map<string, PendingDeletion> = new Map();
 
   constructor(github: GitHubService, slack: SlackService, logger: ILogger, config: BotConfig) {
     this.github = github;
@@ -72,10 +72,15 @@ export class ManualMergesHandler {
 
     this.pendingDeletions.set(requestId, pendingDeletion);
 
+    // Filter out bots from contributors
+    const humanContributors = contributors.filter((c) => !c.includes('[bot]'));
+
     // Send Slack messages to all contributors
     let messagesSent = 0;
     let skippedDuplicates = 0;
-    for (const contributor of contributors) {
+    const missingMappings: string[] = [];
+
+    for (const contributor of humanContributors) {
       // Check if we already sent a DM for this branch/contributor
       const alreadySent = await wasDmSent(context.owner, context.repo, branchName, contributor);
       if (alreadySent) {
@@ -100,6 +105,8 @@ export class ManualMergesHandler {
           branchName,
         });
       } else {
+        // Track missing mappings to notify admin
+        missingMappings.push(contributor);
         this.logger.warn('Could not send deletion request to contributor', {
           contributor,
           branchName,
@@ -107,7 +114,26 @@ export class ManualMergesHandler {
       }
     }
 
-    if (messagesSent > 0) {
+    // Notify admin about missing mappings (if configured)
+    if (missingMappings.length > 0) {
+      const adminUser = this.config.userMapping['_admin'] || this.config.userMapping['GBarb0'];
+      if (adminUser) {
+        const missingKey = `missing-mapping:${missingMappings.sort().join(',')}`;
+        const alreadyNotified = await wasDmSent(context.owner, context.repo, missingKey, '_admin');
+        if (!alreadyNotified) {
+          await this.slack.sendNotification(
+            adminUser,
+            `⚠️ Missing Slack user mappings for: ${missingMappings.join(', ')}\n` +
+              `Branch: \`${branchName}\` in \`${repoFullName}\`\n` +
+              `Add them to \`severino.config.json\` userMapping.`
+          );
+          await markDmSent(context.owner, context.repo, missingKey, '_admin');
+        }
+      }
+    }
+
+    // Success if messages sent OR all were skipped due to deduplication
+    if (messagesSent > 0 || skippedDuplicates === humanContributors.length) {
       return {
         success: true,
         action: 'deletion_request_sent',
@@ -115,12 +141,13 @@ export class ManualMergesHandler {
           requestId,
           branchName,
           repo: repoFullName,
-          contributors,
+          contributors: humanContributors,
           messagesSent,
+          skippedDuplicates,
         },
       };
     } else {
-      // No messages sent - likely no Slack mappings for contributors
+      // No messages sent and not all skipped - missing mappings
       return {
         success: false,
         action: 'deletion_request_sent',
@@ -128,9 +155,10 @@ export class ManualMergesHandler {
           requestId,
           branchName,
           repo: repoFullName,
-          contributors,
+          contributors: humanContributors,
+          missingMappings,
         },
-        error: 'No Slack messages could be sent - check user mappings',
+        error: `Missing Slack mappings for: ${missingMappings.join(', ')}`,
       };
     }
   }

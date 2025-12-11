@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
-import { GitHubService } from '../../../../src/services/github';
-import { BranchAnalyzer } from '../../../../src/services/branchAnalyzer';
-import { MockLogger } from '../../../../src/utils/logger';
-import { loadConfig } from '../../../../src/utils/config';
-import { clearBranchDmRecords } from '../../../../src/services/kvStore';
+import { GitHubService } from '@/src/services/github';
+import { BranchAnalyzer } from '@/src/services/branchAnalyzer';
+import { MockLogger } from '@/src/utils/logger';
+import { loadConfig } from '@/src/utils/config';
+import { clearBranchDmRecords } from '@/src/services/redis';
 
 interface SlackInteractionPayload {
   type: string;
